@@ -48,7 +48,7 @@ class Mc
     # sanitise
     # (note the following list has been butchered, because i did not need all the chars available
     #   and i couldn't be bothered to work out why ruby was choking on some of them)
-    sane = ' !\"#$%&()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_abcdefghijklmnopqrstuvwxyz{|}~' + '"'
+    sane = ' !\"#$%&()*+,-./0123456789:;<=>£?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_abcdefghijklmnopqrstuvwxyz{|}~' + "'"
     safemsg = ""
     msg.each_char { |c|
       if sane.include?(c)
@@ -57,6 +57,12 @@ class Mc
         safemsg << "?"
       end
     }
+
+    # very very bad hack for making irc '/me's work
+    matchdata = /\A<(.*?)> \?ACTION (.*)\?\Z/.match(safemsg)
+    if matchdata != nil
+      safemsg = "* #{matchdata[1]} #{matchdata[2]}"
+    end
 
     if safemsg.length > 100
       safemsg = safemsg[0..96] + "..."
