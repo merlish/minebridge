@@ -17,7 +17,7 @@ class Mc
     @s = TCPSocket.new(@server, @port)
 
     # send first handshake packet (1.2w04a protocol)
-    @s.send [0x02].pack("c") + mc_string("irc;localhost:25565"), 0
+    @s.send [0x02].pack("c") + mc_string("irc;localhost:25565"), 0 
 
     @got_handshake = false
     @logged_in = false
@@ -48,7 +48,7 @@ class Mc
     # sanitise
     # (note the following list has been butchered, because i did not need all the chars available
     #   and i couldn't be bothered to work out why ruby was choking on some of them)
-    sane = ' !\"#$%&()*+,-./0123456789:;<=>£?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_abcdefghijklmnopqrstuvwxyz{|}~' + "'"
+    sane = ' !"#$%&()*+,-./0123456789:;<=>£?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_abcdefghijklmnopqrstuvwxyz{|}~' + "'"
     safemsg = ""
     msg.each_char { |c|
       if sane.include?(c)
@@ -390,7 +390,11 @@ class Mc
     end
 
     print chat
-    ircsay chat
+
+    # hacked mute support
+    if /\A<.*?> \./.match(chat) == nil
+      ircsay chat
+    end
   end
 
   def recv_mc_string(socket)
