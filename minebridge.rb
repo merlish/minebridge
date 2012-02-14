@@ -1,5 +1,5 @@
 require './mc.rb'
-require './irc.rb'
+require './irc2.rb'
 
 mc = Mc.new("localhost", 25565)
 irc = Irc.new("irc.freenode.net", 6667, "##calpol")
