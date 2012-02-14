@@ -1,6 +1,5 @@
 # encoding: utf-8
 require 'socket'
-require 'iconv'
 
 class Mc
   attr_accessor :irc
@@ -16,7 +15,7 @@ class Mc
     print "dat minecraft server"
     @s = TCPSocket.new(@server, @port)
 
-    # send first handshake packet (1.2w04a protocol)
+    # send first handshake packet (1.2w06a protocol)
     @s.send [0x02].pack("c") + mc_string("irc;localhost:25565"), 0 
 
     @got_handshake = false
@@ -28,7 +27,7 @@ class Mc
 
     # got a handshake: time to log in!
     print "logging in..."
-    @s.send mc_byte(0x01) + mc_int(24) + mc_string("irc") + mc_long(0) + mc_string("") + mc_int(0) + mc_byte(0) + mc_byte(0) + mc_ubyte(0) + mc_ubyte(0), 0
+    @s.send mc_byte(0x01) + mc_int(25) + mc_string("irc") + mc_long(0) + mc_string("") + mc_int(0) + mc_byte(0) + mc_byte(0) + mc_ubyte(0) + mc_ubyte(0), 0
 
     while not @logged_in
       nom @s
@@ -48,15 +47,27 @@ class Mc
     # sanitise
     # (note the following list has been butchered, because i did not need all the chars available
     #   and i couldn't be bothered to work out why ruby was choking on some of them)
+    #print "starting sane part"
     sane = ' !"#$%&()*+,-./0123456789:;<=>£?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_abcdefghijklmnopqrstuvwxyz{|}~' + "'"
     safemsg = ""
     msg.each_char { |c|
-      if sane.include?(c)
-        safemsg << c
-      else
+      #print "dat comparison"
+      #print "(testing #{c})"
+      begin
+        if sane.include?(c)
+          #print "#{c} is sane; fine"
+          safemsg << c
+        else
+          #print "not sane: using ?"
+          safemsg << "?"
+        end
+      rescue
+        #print "rescued; using ?"
         safemsg << "?"
       end
     }
+
+    #print "yup, continuing..."
 
     # very very bad hack for making irc '/me's work
     matchdata = /\A<(.*?)> \?ACTION (.*)\?\Z/.match(safemsg)
@@ -68,6 +79,7 @@ class Mc
       safemsg = safemsg[0..96] + "..."
     end
 
+    #print "\ni'mma pushing 0x03 + `#{safemsg}'\n"
     strong = mc_byte(0x03) + mc_string(safemsg)
     @waitsend.push(strong)
   end
@@ -160,7 +172,7 @@ class Mc
       print "0x1a, "
       socket.recv(18)
     elsif t == 0x1c # entity velocity
-      #print "0x1c, "
+      print "0x1c, "
       socket.recv(10)
     elsif t == 0x1e # entity
       socket.recv(4)
@@ -191,7 +203,7 @@ class Mc
       print "0x68, "
       socket.recv(1) # window id
       num_slots = socket.recv(2).unpack("s>").first() # num. slots
-      print "(so parsing #{num_slots} slots), "
+      #print "(so parsing #{num_slots} slots), "
       while (num_slots > 0)
         skip_recv_slot(socket)
         num_slots = num_slots - 1
@@ -214,6 +226,11 @@ class Mc
       socket.recv(2 + 2)
       textlen = socket.recv(1).unpack("C").first()
       socket.recv(textlen)
+    elsif t == 0x84 # update tile entity (12w06a)
+      print "0x84, "
+      socket.recv(10) # x, y, z
+      socket.recv(1) # action
+      socket.recv(12) # custom 1, custom 2, custom 3
     elsif t == 0x67 # set slot (not fully understood, apparently)
       socket.recv(1) # window id
       socket.recv(2) # slot id
@@ -276,7 +293,7 @@ class Mc
       socket.recv(2) # damage/block metadata
       enchantable_ids = [0x103,0x105,0x15a,0x167,0x10c,0x10d,0x10e,0x10f,0x122,0x110,0x111,0x112,0x113,0x123,0x10b,0x100,0x101,0x102,0x124,0x114,0x115,0x116,0x117,0x125,0x11b,0x11c,0x11d,0x11e,0x126,0x12a,0x12b,0x12c,0x12d,0x12e,0x12f,0x130,0x131,0x132,0x133,0x134,0x135,0x136,0x137,0x138,0x139,0x13a,0x13b,0x13c,0x13d]
       is_enchantable = enchantable_ids.include?(id)
-      print "\noh hey, slot item id #{id}.. enchantable: #{is_enchantable}, i think..\n"
+      #print "\noh hey, slot item id #{id}.. enchantable: #{is_enchantable}, i think..\n"
       if is_enchantable
         nbt_data_len = socket.recv(2).unpack("s>").first()
         socket.recv(nbt_data_len)
@@ -287,7 +304,7 @@ class Mc
   def recv_player_list_item(socket)
     player_name = recv_mc_string(socket)
     online = parse_bool(socket.recv(1).unpack("C").first())
-    print "\nPlayer list item: #{player_name} is online? #{online}\n"
+    #print "\nPlayer list item: #{player_name} is online? #{online}\n"
     ping = socket.recv(2)
   end
 
@@ -338,7 +355,8 @@ class Mc
 
   def recv_mob_spawn(socket)
     socket.recv(4) # entity id
-    print "\nmob type is #{socket.recv(1).unpack("c").first()}"
+    mob_type = socket.recv(1).unpack("c").first
+    #print "\nmob type is #{mob_type}"
     socket.recv(12) # x, y, z ints
     socket.recv(1) # yaw
     socket.recv(1) # pitch
@@ -391,10 +409,13 @@ class Mc
 
     print chat
 
-    # hacked mute support
-    if /\A<.*?> \./.match(chat) == nil
-      ircsay chat
-    end
+    # hacked mute support: DISABLED
+    #if /\A<.*?> \./.match(chat) == nil
+      # hack: ignore dave joining/leaving: DISABLED
+      #if /\Ax124/.match(chat) == nil
+        ircsay chat
+      #end
+    #end
   end
 
   def recv_mc_string(socket)
@@ -417,6 +438,7 @@ class Mc
   end
 
   def recv_login(socket)
+    print "got login; responding in kind"
     socket.recv(4) # entity id
     recv_mc_string(socket) # unused string
     socket.recv(8) # map seed
